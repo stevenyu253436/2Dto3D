@@ -6,14 +6,19 @@ import mediapipe as mp
 import numpy as np
 import open3d as o3d
 from scipy.spatial import Delaunay
+import cupy as cp
+import tensorflow as tf
 
 # 加载图像
 image_path = 'S__10092604.jpg'  # 将此路径改为您的图片路径
 image = cv2.imread(image_path)
 
+# 将图像转换为TensorFlow张量
+image_tf = tf.convert_to_tensor(image)
+
 # 初始化Mediapipe
 mp_face_mesh = mp.solutions.face_mesh
-face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True, max_num_faces=1, refine_landmarks=True)
+face_mesh = mp_face_mesh.FaceMesh(static_image_mode=True)
 
 # 处理图像
 results = face_mesh.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -39,25 +44,25 @@ if results.multi_face_landmarks:
             if i == 1:  # 通常鼻尖索引为1或4，可以根据具体模型调整
                 nose_tip = np.array([x, y, z])
 
-# 转换为NumPy数组
-points_3d = np.array(points_3d)
-points_2d = np.array(points_2d)
-colors = np.array(colors)
+# 转换为CuPy数组
+points_3d_cp = cp.array(points_3d)
+points_2d_cp = cp.array(points_2d)
+colors_cp = cp.array(colors)
 
 # 创建Delaunay三角化
-tri = Delaunay(points_2d)
+tri = Delaunay(cp.asnumpy(points_2d_cp))
 
 # 反转三角形顶点顺序以改变法线方向
 triangles = tri.simplices
-triangles = np.array([triangle[::-1] for triangle in triangles])
+triangles = cp.array([triangle[::-1] for triangle in triangles])
 
 # 创建Open3D网格对象
 mesh = o3d.geometry.TriangleMesh()
-mesh.vertices = o3d.utility.Vector3dVector(points_3d)
-mesh.triangles = o3d.utility.Vector3iVector(triangles)
+mesh.vertices = o3d.utility.Vector3dVector(cp.asnumpy(points_3d_cp))
+mesh.triangles = o3d.utility.Vector3iVector(cp.asnumpy(triangles))
 
 # 为网格添加颜色
-mesh.vertex_colors = o3d.utility.Vector3dVector(colors)
+mesh.vertex_colors = o3d.utility.Vector3dVector(cp.asnumpy(colors_cp))
 
 # 创建纹理映射
 texture_image = o3d.geometry.Image(image)
